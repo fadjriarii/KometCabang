@@ -1,0 +1,8 @@
+{
+  "name": "KOMET",
+  "description": "Academic Analytics & Institutional Intelligence Dashboard (KOMET) — Phase 1 Institutional KPI and Sevima Feeder metrics dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
