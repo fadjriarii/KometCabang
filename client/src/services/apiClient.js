@@ -32,7 +32,13 @@ export async function apiFetch(endpoint, options = {}) {
   }
 
   const json = await res.json();
-  return json.data !== undefined ? json.data : json;
+  if (json.data !== undefined) {
+    if (json.metrics !== undefined || json.pagination !== undefined || json.filterOptions !== undefined) {
+      return json;
+    }
+    return json.data;
+  }
+  return json;
 }
 
 export const apiClient = {

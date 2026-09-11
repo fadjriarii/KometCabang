@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "npm run dev --workspace=client",
     "build": "npm run build --workspace=client",
-    "lint": "npm run build --workspace=client"
+    "lint": "npm run build --workspace=client",
+    "start": "node server/index.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
