@@ -4,6 +4,8 @@ import {
   calculateForeignStudentsMetric,
   calculateActiveIntakeMetric,
   getEnrichedStudents,
+  getForeignStudentTrend5Years,
+  getIntakeTrend5Years,
 } from './studentCalculationService.js';
 import {
   calculateTotalGraduatesCount,
@@ -209,5 +211,131 @@ export const METRIC_MODAL_REGISTRY = {
 };
 
 export const getInteractiveMetricDetail = (metricKey) => {
+  if (metricKey === 'active_students') {
+    const totalActive = calculateTotalActiveStudents();
+    const foreignTrend = getForeignStudentTrend5Years();
+    const points = foreignTrend.map((item, index) => {
+      let delta = 'Basis';
+      if (index > 0) {
+        const prev = foreignTrend[index - 1].totalActive;
+        if (prev > 0) {
+          const diff = item.totalActive - prev;
+          delta = `${diff >= 0 ? '+' : ''}${Math.round((diff / prev) * 100)}%`;
+        }
+      }
+      return {
+        sem: `Angkatan ${item.year}`,
+        short: `${item.year}`,
+        val: `${item.totalActive} Mhs`,
+        num: item.totalActive,
+        pct: Math.min(100, Math.round((item.totalActive / 250) * 100)),
+        delta,
+        status: 'Aktif',
+      };
+    });
+
+    return {
+      title: 'Total Active Students',
+      badge: 'Student Body KPI',
+      icon: 'groups',
+      formula: 'Total mahasiswa berstatus AKTIF terdaftar pada semester berjalan',
+      desc: `Dihitung dari ${totalActive} records mahasiswa aktif di sistem akademik saat ini.`,
+      latest: `${totalActive}`,
+      growth: 'Data Real-time',
+      points,
+    };
+  }
+
+  if (metricKey === 'foreign_students') {
+    const foreignData = calculateForeignStudentsMetric();
+    const foreignTrend = getForeignStudentTrend5Years();
+    const points = foreignTrend.map((item) => ({
+      sem: `Angkatan ${item.year}`,
+      short: `${item.year}`,
+      val: `${item.percentageFormatted}`,
+      num: item.percentage,
+      pct: Math.min(100, Math.round(item.percentage * 10)),
+      delta: `${item.foreignActive} Mhs`,
+      status: item.percentage >= 5 ? 'Target Tercapai' : 'Di Bawah Target',
+    }));
+
+    return {
+      title: 'International Student Percentage',
+      badge: 'Global Diversity KPI',
+      icon: 'public',
+      formula: '(Jumlah Mahasiswa Asing Aktif / Total Mahasiswa Aktif) × 100%',
+      desc: 'Target institusi ≥ 5.0% mahasiswa internasional lintas prodi.',
+      latest: `${foreignData.percentage}`,
+      growth: `${foreignData.count} Mahasiswa Asing`,
+      points,
+    };
+  }
+
+  if (metricKey === 'student_intake') {
+    const intakeData = calculateActiveIntakeMetric();
+    const intakeTrend = getIntakeTrend5Years();
+    const points = intakeTrend.map((item) => ({
+      sem: `Angkatan ${item.year}`,
+      short: `${item.year}`,
+      val: `${item.intake}`,
+      num: item.intake,
+      pct: Math.min(100, Math.round((item.intake / 250) * 100)),
+      delta: item.growth === '-' ? 'Basis' : item.growth,
+      status: item.intake >= 160 ? 'Tercapai' : 'Kurang',
+    }));
+
+    return {
+      title: 'New Student Intake (Mahasiswa Baru)',
+      badge: 'Admissions & Enrollment',
+      icon: 'person_add',
+      formula: 'Jumlah mahasiswa baru yang resmi terdaftar di semester 1',
+      desc: 'Target penerimaan 160 mahasiswa baru per tahun akademik berjalan.',
+      latest: `${intakeData.count}`,
+      growth: `${intakeData.filledPercentage} Target Tercapai`,
+      points,
+    };
+  }
+
+  if (metricKey === 'total_graduates') {
+    const totalGrads = calculateTotalGraduatesCount(kelulusanData);
+    const gradTrend = groupGraduatesByYear(kelulusanData);
+    const points = gradTrend.map((item) => ({
+      sem: `Tahun Lulus ${item.year}`,
+      short: `${item.year}`,
+      val: `${item.count} Alumni`,
+      num: item.count,
+      pct: Math.min(100, Math.round((item.count / 200) * 100)),
+      delta: `Target: 200`,
+      status: item.count >= 200 ? 'Tercapai' : 'Kurang',
+    }));
+
+    return {
+      title: 'Total Graduates',
+      badge: 'Alumni & Completion',
+      icon: 'school',
+      formula: 'Akumulasi total lulusan terdaftar dalam database yudisium resmi',
+      desc: `Total lulusan terekam sebanyak ${totalGrads} alumni (S1 dan S2) lintas seluruh program studi.`,
+      latest: `${totalGrads}`,
+      growth: 'Data Yudisium Real-time',
+      points,
+    };
+  }
+
+  if (metricKey === 'ontime_graduation') {
+    const onTimeData = calculateOnTimeGraduationRate(kelulusanData);
+    return {
+      ...METRIC_MODAL_REGISTRY.ontime_graduation,
+      latest: onTimeData.rate,
+    };
+  }
+
+  if (metricKey === 'study_success') {
+    const studySuccessData = calculateStudySuccessRate(kelulusanData);
+    return {
+      ...METRIC_MODAL_REGISTRY.study_success,
+      latest: studySuccessData.rate,
+    };
+  }
+
   return METRIC_MODAL_REGISTRY[metricKey] || METRIC_MODAL_REGISTRY.active_students;
 };

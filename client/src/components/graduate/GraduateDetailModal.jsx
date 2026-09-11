@@ -6,14 +6,14 @@ import { GpaOverviewView } from './views/GpaOverviewView';
 import { OnTimeGraduationView } from './views/OnTimeGraduationView';
 import { StudySuccessView } from './views/StudySuccessView';
 
-export const GraduateDetailModal = ({ isOpen = true, type, metricType, originRect, onClose }) => {
+export const GraduateDetailModal = ({ isOpen = true, type, metricType, originRect, onClose, queryParams = {} }) => {
   const currentMetricType = type || metricType || 'total-graduates';
   const [isMounted, setIsMounted] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
   const { data: analytics } = useApiData(
-    () => (isOpen ? apiClient.getGraduateAnalytics() : Promise.resolve(null)),
-    [isOpen]
+    () => (isOpen ? apiClient.getGraduateAnalytics(queryParams) : Promise.resolve(null)),
+    [isOpen, queryParams]
   );
 
   useEffect(() => {

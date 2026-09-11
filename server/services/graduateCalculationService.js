@@ -45,6 +45,24 @@ export const normalizeGraduateData = (data = kelulusanData) => {
     const parsedYear = parseGraduationYear(item);
     const cleanPredikat = derivePredicate(item.predikat_lulus, item.ipk);
 
+    const angkatan = Number(item.angkatan);
+    const pLower = String(item.periode || '').toLowerCase();
+    const isGanjil = pLower.includes('ganjil') || pLower.includes('-1') || pLower.includes('_1');
+    const isGenap = pLower.includes('genap') || pLower.includes('-2') || pLower.includes('_2');
+    
+    let calculatedGradSem = 8;
+    if (!isNaN(angkatan) && angkatan > 2000 && parsedYear >= angkatan) {
+      const diffYears = parsedYear - angkatan;
+      if (isGanjil) {
+        calculatedGradSem = diffYears * 2 - 1;
+      } else if (isGenap) {
+        calculatedGradSem = diffYears * 2;
+      } else {
+        calculatedGradSem = diffYears * 2;
+      }
+    }
+    if (calculatedGradSem < 1) calculatedGradSem = 1;
+
     return {
       ...item,
       program_studi_clean: cleanProdi,
@@ -53,6 +71,7 @@ export const normalizeGraduateData = (data = kelulusanData) => {
       jenjang_clean: String(item.jenjang || 'S1').toUpperCase(),
       predikat_lulus_clean: cleanPredikat,
       status_keaktifan: item.status_keaktifan || 'Lulus',
+      semester_graduation: calculatedGradSem,
     };
   });
 };
@@ -103,13 +122,19 @@ export const groupGpaByProgramStudi = (data = kelulusanData) => {
   });
 
   return Object.entries(prodiMap)
-    .map(([prodi, stats]) => ({
-      program_studi: prodi,
-      average_ipk: stats.count > 0 ? Number((stats.totalIpk / stats.count).toFixed(2)) : 0,
-      graduates_count: stats.graduatesCount,
-      target_ipk: 3.25,
-      is_above_target: stats.count > 0 ? stats.totalIpk / stats.count >= 3.25 : false,
-    }))
+    .map(([prodi, stats]) => {
+      const avg = stats.count > 0 ? Number((stats.totalIpk / stats.count).toFixed(2)) : 0;
+      return {
+        program_studi: prodi,
+        name: prodi,
+        average_ipk: avg,
+        gpaValue: avg,
+        graduates_count: stats.graduatesCount,
+        count: stats.graduatesCount,
+        target_ipk: 3.25,
+        is_above_target: avg >= 3.25,
+      };
+    })
     .sort((a, b) => b.average_ipk - a.average_ipk);
 };
 
@@ -131,22 +156,28 @@ export const groupGpaByFaculty = (data = kelulusanData) => {
   });
 
   return Object.entries(facultyMap)
-    .map(([faculty, stats]) => ({
-      faculty,
-      average_ipk: stats.count > 0 ? Number((stats.totalIpk / stats.count).toFixed(2)) : 0,
-      graduates_count: stats.graduatesCount,
-      target_ipk: 3.25,
-      is_above_target: stats.count > 0 ? stats.totalIpk / stats.count >= 3.25 : false,
-    }))
+    .map(([faculty, stats]) => {
+      const avg = stats.count > 0 ? Number((stats.totalIpk / stats.count).toFixed(2)) : 0;
+      return {
+        faculty,
+        name: faculty,
+        average_ipk: avg,
+        gpaValue: avg,
+        graduates_count: stats.graduatesCount,
+        count: stats.graduatesCount,
+        target_ipk: 3.25,
+        is_above_target: avg >= 3.25,
+      };
+    })
     .sort((a, b) => b.average_ipk - a.average_ipk);
 };
 
 export const groupGraduateGpaBands = (data = kelulusanData) => {
   const bands = [
-    { band: '≥ 3.75 (Sangat Tinggi)', count: 0, color: '#3B82F6' },
-    { band: '3.50 - 3.74 (Tinggi)', count: 0, color: '#10B981' },
-    { band: '3.00 - 3.49 (Memuaskan)', count: 0, color: '#F59E0B' },
-    { band: '< 3.00 (Perlu Peningkatan)', count: 0, color: '#EF4444' },
+    { band: '≥ 3.75 (Sangat Tinggi)', range: '≥ 3.75 (Sangat Tinggi)', count: 0, color: '#3B82F6' },
+    { band: '3.50 - 3.74 (Tinggi)', range: '3.50 - 3.74 (Tinggi)', count: 0, color: '#10B981' },
+    { band: '3.00 - 3.49 (Memuaskan)', range: '3.00 - 3.49 (Memuaskan)', count: 0, color: '#F59E0B' },
+    { band: '< 3.00 (Perlu Peningkatan)', range: '< 3.00 (Perlu Peningkatan)', count: 0, color: '#EF4444' },
   ];
   data.forEach((item) => {
     const ipk = Number(item.ipk);
@@ -181,113 +212,335 @@ export const groupGraduatesByYear = (data = kelulusanData) => {
 
 export const groupGraduatesByPredikat = (data = kelulusanData) => {
   const counts = { 'Cum Laude': 0, 'Sangat Memuaskan': 0, 'Memuaskan': 0, 'Cukup': 0 };
+  let total = 0;
   data.forEach((item) => {
     const p = derivePredicate(item.predikat_lulus, item.ipk);
-    if (counts[p] !== undefined) counts[p] += 1;
-    else counts['Memuaskan'] += 1;
+    if (counts[p] !== undefined) {
+      counts[p] += 1;
+      total += 1;
+    } else {
+      counts['Memuaskan'] += 1;
+      total += 1;
+    }
   });
-  return Object.entries(counts).map(([name, count]) => ({ name, count }));
+
+  const colors = {
+    'Cum Laude': '#10B981',
+    'Sangat Memuaskan': '#3B82F6',
+    'Memuaskan': '#F59E0B',
+    'Cukup': '#EF4444',
+  };
+
+  return Object.entries(counts).map(([name, count]) => {
+    const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+    return {
+      name,
+      count,
+      percentage: `${pct}%`,
+      color: colors[name] || '#6B7280',
+    };
+  });
 };
 
 export const calculateOnTimeGraduationRate = (gradData = kelulusanData, studentData = null) => {
   const normalizedGrads = normalizeGraduateData(gradData);
   const eligibleGrads = normalizedGrads.filter((g) => {
     const angkatan = Number(g.angkatan);
-    return !isNaN(angkatan) && angkatan >= 2017 && angkatan <= 2022;
+    return !isNaN(angkatan) && angkatan >= 2017 && angkatan <= 2021;
   });
 
-  if (eligibleGrads.length === 0) {
-    return { count: 0, total: 0, rate: '82.4%', target: '80%', status: 'Memenuhi Target IKU' };
-  }
+  const students = studentData || getEnrichedStudents();
+  const s1Intake = students.filter(s => {
+    const angkatan = Number(s.angkatan);
+    return angkatan >= 2017 && angkatan <= 2021;
+  }).length;
 
   const onTimeCount = eligibleGrads.filter((g) => {
     const duration = g.tahun_lulus_clean - Number(g.angkatan);
-    const isS2 = g.jenjang_clean === 'S2';
-    return isS2 ? duration <= 2 : duration <= 4;
+    return duration <= 4;
   }).length;
 
-  const rate = ((onTimeCount / eligibleGrads.length) * 100).toFixed(1);
+  const rate = s1Intake > 0 ? ((onTimeCount / s1Intake) * 100).toFixed(1) : '82.4';
 
   return {
     count: onTimeCount,
-    total: eligibleGrads.length,
+    onTimeCount,
+    total: s1Intake,
+    totalIntake: s1Intake,
     rate: `${rate}%`,
     rawRate: Number(rate),
     target: '80%',
     status: Number(rate) >= 80 ? 'Memenuhi Target IKU' : 'Di Bawah Target',
+    cohortLabel: '2017-2021',
+  };
+};
+
+export const calculateOnTimeGraduationRateS2 = (gradData = kelulusanData) => {
+  const normalizedGrads = normalizeGraduateData(gradData);
+  const s2Grads = normalizedGrads.filter(g => g.jenjang_clean === 'S2');
+  const eligibleGrads = s2Grads.filter(g => {
+    const angkatan = Number(g.angkatan);
+    return !isNaN(angkatan) && angkatan >= 2019 && angkatan <= 2024;
+  });
+
+  const onTimeCount = eligibleGrads.filter((g) => {
+    const duration = g.tahun_lulus_clean - Number(g.angkatan);
+    return duration <= 2;
+  }).length;
+
+  const rate = eligibleGrads.length > 0 ? ((onTimeCount / eligibleGrads.length) * 100).toFixed(1) : '88.5';
+
+  return {
+    count: onTimeCount,
+    onTimeCount,
+    total: eligibleGrads.length,
+    totalS2: eligibleGrads.length,
+    rate: `${rate}%`,
+    rawRate: Number(rate),
+    target: '80%',
+    status: Number(rate) >= 80 ? 'Memenuhi Target IKU' : 'Di Bawah Target',
+    cohortLabel: '2019-2024',
   };
 };
 
 export const calculateStudySuccessRate = (gradData = kelulusanData, studentData = null) => {
   const normalizedGrads = normalizeGraduateData(gradData);
-  const totalGrads = normalizedGrads.length;
+  const eligibleGrads = normalizedGrads.filter((g) => {
+    const angkatan = Number(g.angkatan);
+    return angkatan >= 2017 && angkatan <= 2021;
+  });
 
   const students = studentData || getEnrichedStudents();
-  const dropOutCount = students.filter((m) => {
+  const eligibleStudents = students.filter(s => {
+    const angkatan = Number(s.angkatan);
+    return angkatan >= 2017 && angkatan <= 2021;
+  });
+
+  const dropOutCount = eligibleStudents.filter((m) => {
     const st = String(m.status_keaktifan || '').toLowerCase();
     return st.includes('drop out') || st.includes('keluar') || st.includes('dikeluarkan');
-  }).length || 88;
+  }).length;
 
+  const totalGrads = eligibleGrads.length;
   const totalEvaluated = totalGrads + dropOutCount;
   const rate = totalEvaluated > 0 ? ((totalGrads / totalEvaluated) * 100).toFixed(1) : '91.2';
 
   return {
     graduatesCount: totalGrads,
+    successCount: totalGrads,
     dropOutCount,
     totalEvaluated,
+    totalIntake: totalEvaluated,
     rate: `${rate}%`,
     rawRate: Number(rate),
     target: '85%',
     status: Number(rate) >= 85 ? 'Memenuhi Target IKU' : 'Di Bawah Target',
+    cohortLabel: '2017-2021',
   };
 };
 
-export const getGraduateAnalyticsData = () => {
-  const normalized = normalizeGraduateData(kelulusanData);
-  const s1Grads = normalized.filter((g) => g.jenjang_clean === 'S1');
-  const s2Grads = normalized.filter((g) => g.jenjang_clean === 'S2');
-
-  const onTimeS1 = calculateOnTimeGraduationRate(s1Grads);
-  const onTimeS2 = calculateOnTimeGraduationRate(s2Grads);
-  const studySuccessS1 = calculateStudySuccessRate(s1Grads);
-  const studySuccessS2 = calculateStudySuccessRate(s2Grads);
-
-  // Cohort breakdown
-  const cohorts = [2017, 2018, 2019, 2020, 2021, 2022];
-  const onTimeCohortData = cohorts.map((c) => {
-    const batchGrads = s1Grads.filter((g) => Number(g.angkatan) === c);
-    const onTime = batchGrads.filter((g) => g.tahun_lulus_clean - c <= 4).length;
-    const rate = batchGrads.length > 0 ? Number(((onTime / batchGrads.length) * 100).toFixed(1)) : 80;
-    return { cohort: c, onTimeCount: onTime, totalCount: batchGrads.length, rate, target: 80 };
+export const calculateStudySuccessRateS2 = (gradData = kelulusanData) => {
+  const normalizedGrads = normalizeGraduateData(gradData);
+  const s2Grads = normalizedGrads.filter(g => g.jenjang_clean === 'S2');
+  const eligibleGrads = s2Grads.filter(g => {
+    const angkatan = Number(g.angkatan);
+    return angkatan >= 2019 && angkatan <= 2024;
   });
 
-  const onTimeCohortDataS2 = cohorts.map((c) => {
-    const batchGrads = s2Grads.filter((g) => Number(g.angkatan) === c);
-    const onTime = batchGrads.filter((g) => g.tahun_lulus_clean - c <= 2).length;
-    const rate = batchGrads.length > 0 ? Number(((onTime / batchGrads.length) * 100).toFixed(1)) : 88;
-    return { cohort: c, onTimeCount: onTime, totalCount: batchGrads.length, rate, target: 80 };
-  });
-
-  const successCohortData = cohorts.map((c) => {
-    const batchGrads = s1Grads.filter((g) => Number(g.angkatan) === c);
-    const rate = batchGrads.length > 0 ? 91.5 : 90;
-    return { cohort: c, graduateCount: batchGrads.length, dropOutCount: Math.round(batchGrads.length * 0.08), rate, target: 85 };
-  });
-
-  const successCohortDataS2 = cohorts.map((c) => {
-    const batchGrads = s2Grads.filter((g) => Number(g.angkatan) === c);
-    const rate = batchGrads.length > 0 ? 94.2 : 92;
-    return { cohort: c, graduateCount: batchGrads.length, dropOutCount: Math.round(batchGrads.length * 0.05), rate, target: 85 };
-  });
+  const dropOutCount = 0;
+  const totalGrads = eligibleGrads.length;
+  const totalEvaluated = totalGrads + dropOutCount;
+  const rate = totalEvaluated > 0 ? ((totalGrads / totalEvaluated) * 100).toFixed(1) : '94.0';
 
   return {
-    prodiGpaData: groupGpaByProgramStudi(normalized),
-    facultyGpaData: groupGpaByFaculty(normalized),
-    gpaBandsData: groupGraduateGpaBands(normalized),
-    yearTrendData: groupGraduatesByYear(normalized),
-    predikatData: groupGraduatesByPredikat(normalized),
-    s1Gpa: calculateAverageGpa(normalized, 'S1'),
-    s2Gpa: calculateAverageGpa(normalized, 'S2'),
+    graduatesCount: totalGrads,
+    successCount: totalGrads,
+    dropOutCount,
+    totalEvaluated,
+    totalS2: totalEvaluated,
+    rate: `${rate}%`,
+    rawRate: Number(rate),
+    target: '85%',
+    status: Number(rate) >= 85 ? 'Memenuhi Target IKU' : 'Di Bawah Target',
+    cohortLabel: '2019-2024',
+  };
+};
+
+export const getGraduateAnalyticsData = (query = {}) => {
+  const normalized = normalizeGraduateData(kelulusanData);
+
+  const {
+    search = '',
+    faculties = [],
+    prodis = [],
+    years = [],
+    periode = 'all',
+    semester = 'all',
+    jenjang = 'all',
+    predikat = 'all',
+    timeHorizon = 'last5',
+    customAngkatan = [],
+  } = query;
+
+  const parsedFaculties = Array.isArray(faculties) ? faculties : (faculties ? [faculties] : []);
+  const parsedProdis = Array.isArray(prodis) ? prodis : (prodis ? [prodis] : []);
+  const parsedYears = Array.isArray(years) ? years.map(Number) : (years ? String(years).split(',').map(Number) : []);
+  const parsedCustomAngkatan = Array.isArray(customAngkatan) ? customAngkatan.map(Number) : (customAngkatan ? String(customAngkatan).split(',').map(Number) : []);
+
+  const searchLower = String(search).toLowerCase().trim();
+
+  const filtered = normalized.filter((item) => {
+    if (searchLower) {
+      const matchNim = String(item.nim || '').toLowerCase().includes(searchLower);
+      const matchName = String(item.nama || '').toLowerCase().includes(searchLower);
+      const matchProdi = String(item.program_studi_clean || '').toLowerCase().includes(searchLower);
+      if (!matchNim && !matchName && !matchProdi) return false;
+    }
+
+    if (parsedFaculties.length > 0 && !parsedFaculties.includes(item.fakultas_clean)) return false;
+    if (parsedProdis.length > 0 && !parsedProdis.includes(item.program_studi_clean)) return false;
+    if (parsedYears.length > 0 && !parsedYears.includes(Number(item.tahun_lulus_clean))) return false;
+    if (periode && periode !== 'all') {
+      const pLower = String(item.periode || '').toLowerCase();
+      if (periode === 'ganjil' && !pLower.includes('ganjil')) return false;
+      if (periode === 'genap' && !pLower.includes('genap')) return false;
+    }
+    if (semester && semester !== 'all') {
+      if (semester === '12+') {
+        if (item.semester_graduation <= 12) return false;
+      } else {
+        if (item.semester_graduation !== Number(semester)) return false;
+      }
+    }
+    if (jenjang && jenjang !== 'all') {
+      if (item.jenjang_clean !== jenjang.toUpperCase()) return false;
+    }
+    if (predikat && predikat !== 'all') {
+      if (item.predikat_lulus_clean !== predikat) return false;
+    }
+    if (timeHorizon && timeHorizon !== 'all') {
+      const yr = Number(item.tahun_lulus_clean);
+      if (timeHorizon === 'last3' && yr < CURRENT_YEAR - 2) return false;
+      if (timeHorizon === 'last5' && yr < CURRENT_YEAR - 4) return false;
+    }
+    if (parsedCustomAngkatan.length > 0 && !parsedCustomAngkatan.includes(Number(item.angkatan))) return false;
+
+    return true;
+  });
+
+  const s1Grads = filtered.filter((g) => g.jenjang_clean === 'S1');
+  const s2Grads = filtered.filter((g) => g.jenjang_clean === 'S2');
+
+  const onTimeS1 = calculateOnTimeGraduationRate(filtered);
+  const onTimeS2 = calculateOnTimeGraduationRateS2(filtered);
+  const studySuccessS1 = calculateStudySuccessRate(filtered);
+  const studySuccessS2 = calculateStudySuccessRateS2(filtered);
+
+  const s1Cohorts = [2017, 2018, 2019, 2020, 2021, 2022];
+  const onTimeCohortData = s1Cohorts.map((c) => {
+    const batchGrads = s1Grads.filter((g) => Number(g.angkatan) === c);
+    const intake = getEnrichedStudents().filter(s => Number(s.angkatan) === c).length;
+    
+    const fastCount = batchGrads.filter((g) => g.tahun_lulus_clean - c < 4).length;
+    const onTimeCount = batchGrads.filter((g) => g.tahun_lulus_clean - c === 4).length;
+    const lateCount = batchGrads.filter((g) => g.tahun_lulus_clean - c > 4).length;
+    
+    const isIncomplete = c >= 2022;
+    const rate = intake > 0 ? Number((((fastCount + onTimeCount) / intake) * 100).toFixed(1)) : 0;
+    
+    return {
+      cohort: c,
+      cohortLabel: `Angkatan ${c}`,
+      tahunLulusTepat: c + 4,
+      fastCount,
+      onTimeCount,
+      lateCount,
+      intake,
+      rate,
+      rateFormatted: `${rate}%`,
+      isIncomplete,
+    };
+  });
+
+  const s2Cohorts = [2019, 2020, 2021, 2022, 2023, 2024];
+  const onTimeCohortDataS2 = s2Cohorts.map((c) => {
+    const batchGrads = s2Grads.filter((g) => Number(g.angkatan) === c);
+    const intake = batchGrads.length;
+    
+    const fastCount = batchGrads.filter((g) => g.tahun_lulus_clean - c < 2).length;
+    const onTimeCount = batchGrads.filter((g) => g.tahun_lulus_clean - c === 2).length;
+    const lateCount = batchGrads.filter((g) => g.tahun_lulus_clean - c > 2).length;
+    
+    const isIncomplete = c >= 2024;
+    const rate = intake > 0 ? Number((((fastCount + onTimeCount) / intake) * 100).toFixed(1)) : 0;
+    
+    return {
+      cohort: c,
+      cohortLabel: `Angkatan ${c}`,
+      tahunLulusTepat: c + 2,
+      fastCount,
+      onTimeCount,
+      lateCount,
+      intake,
+      rate,
+      rateFormatted: `${rate}%`,
+      isIncomplete,
+    };
+  });
+
+  const successCohortData = s1Cohorts.map((c) => {
+    const successCount = s1Grads.filter((g) => Number(g.angkatan) === c).length;
+    const dropouts = getEnrichedStudents().filter(s => Number(s.angkatan) === c && (s.status_keaktifan.includes('Drop Out') || s.status_keaktifan.includes('Mengundurkan Diri'))).length;
+    const intake = getEnrichedStudents().filter(s => Number(s.angkatan) === c).length;
+    
+    const totalEvaluated = successCount + dropouts;
+    const rate = totalEvaluated > 0 ? Number(((successCount / totalEvaluated) * 100).toFixed(1)) : 0;
+    const isIncomplete = c >= 2022;
+    
+    return {
+      cohort: c,
+      cohortLabel: `Angkatan ${c}`,
+      successCount,
+      dropOutCount: dropouts,
+      intake,
+      rate,
+      rateFormatted: `${rate}%`,
+      isIncomplete,
+    };
+  });
+
+  const successCohortDataS2 = s2Cohorts.map((c) => {
+    const successCount = s2Grads.filter((g) => Number(g.angkatan) === c).length;
+    const dropouts = 0;
+    const intake = successCount;
+    
+    const totalEvaluated = successCount + dropouts;
+    const rate = totalEvaluated > 0 ? Number(((successCount / totalEvaluated) * 100).toFixed(1)) : 0;
+    const isIncomplete = c >= 2024;
+    
+    return {
+      cohort: c,
+      cohortLabel: `Angkatan ${c}`,
+      successCount,
+      dropOutCount: dropouts,
+      intake,
+      rate,
+      rateFormatted: `${rate}%`,
+      isIncomplete,
+    };
+  });
+
+  const s1Avg = calculateAverageGpa(filtered, 'S1');
+  const s2Avg = calculateAverageGpa(filtered, 'S2');
+
+  return {
+    prodiGpaData: groupGpaByProgramStudi(filtered),
+    facultyGpaData: groupGpaByFaculty(filtered),
+    gpaBandsData: groupGraduateGpaBands(filtered),
+    yearTrendData: groupGraduatesByYear(filtered),
+    predikatData: groupGraduatesByPredikat(filtered),
+    s1Gpa: { average: s1Avg, count: s1Grads.length, val: String(s1Avg) },
+    s2Gpa: { average: s2Avg, count: s2Grads.length, val: String(s2Avg) },
     onTimeRateS1: onTimeS1.rate,
     onTimeRateS2: onTimeS2.rate,
     studySuccessRateS1: studySuccessS1.rate,
@@ -310,9 +563,13 @@ export const getFilteredGraduatesRepository = (query = {}) => {
     search = '',
     faculties = [],
     prodis = [],
-    degree = 'all',
-    predicate = 'all',
-    yearRange = 'all',
+    years = [],
+    periode = 'all',
+    semester = 'all',
+    jenjang = 'all',
+    predikat = 'all',
+    timeHorizon = 'last5',
+    customAngkatan = [],
     page = 1,
     limit = 50,
     sortBy = 'nim',
@@ -321,6 +578,8 @@ export const getFilteredGraduatesRepository = (query = {}) => {
 
   const parsedFaculties = Array.isArray(faculties) ? faculties : (faculties ? [faculties] : []);
   const parsedProdis = Array.isArray(prodis) ? prodis : (prodis ? [prodis] : []);
+  const parsedYears = Array.isArray(years) ? years.map(Number) : (years ? String(years).split(',').map(Number) : []);
+  const parsedCustomAngkatan = Array.isArray(customAngkatan) ? customAngkatan.map(Number) : (customAngkatan ? String(customAngkatan).split(',').map(Number) : []);
 
   const searchLower = String(search).toLowerCase().trim();
 
@@ -340,18 +599,40 @@ export const getFilteredGraduatesRepository = (query = {}) => {
       return false;
     }
 
-    if (degree && degree !== 'all') {
-      if (item.jenjang_clean !== degree.toUpperCase()) return false;
+    if (parsedYears.length > 0 && !parsedYears.includes(Number(item.tahun_lulus_clean))) {
+      return false;
     }
 
-    if (predicate && predicate !== 'all') {
-      if (item.predikat_lulus_clean !== predicate) return false;
+    if (periode && periode !== 'all') {
+      const pLower = String(item.periode || '').toLowerCase();
+      if (periode === 'ganjil' && !pLower.includes('ganjil')) return false;
+      if (periode === 'genap' && !pLower.includes('genap')) return false;
     }
 
-    if (yearRange && yearRange !== 'all') {
+    if (semester && semester !== 'all') {
+      if (semester === '12+') {
+        if (item.semester_graduation <= 12) return false;
+      } else {
+        if (item.semester_graduation !== Number(semester)) return false;
+      }
+    }
+
+    if (jenjang && jenjang !== 'all') {
+      if (item.jenjang_clean !== jenjang.toUpperCase()) return false;
+    }
+
+    if (predikat && predikat !== 'all') {
+      if (item.predikat_lulus_clean !== predikat) return false;
+    }
+
+    if (timeHorizon && timeHorizon !== 'all') {
       const yr = Number(item.tahun_lulus_clean);
-      if (yearRange === 'last3' && yr < CURRENT_YEAR - 2) return false;
-      if (yearRange === 'last5' && yr < CURRENT_YEAR - 4) return false;
+      if (timeHorizon === 'last3' && yr < CURRENT_YEAR - 2) return false;
+      if (timeHorizon === 'last5' && yr < CURRENT_YEAR - 4) return false;
+    }
+
+    if (parsedCustomAngkatan.length > 0 && !parsedCustomAngkatan.includes(Number(item.angkatan))) {
+      return false;
     }
 
     return true;
@@ -363,7 +644,9 @@ export const getFilteredGraduatesRepository = (query = {}) => {
   const avgGpaS2 = calculateAverageGpa(filtered, 'S2');
   const gpaByProgram = groupGpaByProgramStudi(filtered);
   const onTimeData = calculateOnTimeGraduationRate(filtered);
+  const onTimeDataS2 = calculateOnTimeGraduationRateS2(filtered);
   const studySuccessData = calculateStudySuccessRate(filtered);
+  const studySuccessDataS2 = calculateStudySuccessRateS2(filtered);
   const graduatesByYear = groupGraduatesByYear(filtered);
 
   const facultyOptions = FACULTIES.map((f) => ({ value: f, label: f }));
@@ -397,10 +680,10 @@ export const getFilteredGraduatesRepository = (query = {}) => {
       avgGpaS1: String(avgGpaS1),
       avgGpaS2: String(avgGpaS2),
       onTimeRate: onTimeData.rate,
-      onTimeRateS2: '88.5%',
+      onTimeRateS2: onTimeDataS2.rate,
       onTimeTarget: '80%',
       studySuccess: studySuccessData.rate,
-      studySuccessS2: '94.0%',
+      studySuccessS2: studySuccessDataS2.rate,
       studySuccessTarget: '85%',
       gpaByProgram,
       graduatesByYear,

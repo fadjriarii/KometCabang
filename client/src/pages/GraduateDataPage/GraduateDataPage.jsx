@@ -83,7 +83,6 @@ export const GraduateDataPage = () => {
   };
 
   const handleOpenDetailModal = (type, originRect) => {
-    if (filters.isFiltered) return;
     setActiveModalType(type);
     setModalOriginRect(originRect);
     setIsDetailModalOpen(true);
@@ -196,6 +195,7 @@ export const GraduateDataPage = () => {
         }}
         originRect={modalOriginRect}
         type={activeModalType}
+        queryParams={filters.queryParams}
       />
     </div>
   );

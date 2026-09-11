@@ -51,7 +51,37 @@ export const getGraduatesRepository = (req, res) => {
 
 export const getGraduateAnalytics = (req, res) => {
   try {
-    const data = getGraduateAnalyticsData();
+    const {
+      search,
+      faculties,
+      prodis,
+      years,
+      periode,
+      semester,
+      jenjang,
+      predikat,
+      timeHorizon,
+      customAngkatan,
+    } = req.query;
+
+    const parsedFaculties = faculties ? (Array.isArray(faculties) ? faculties : faculties.split(',')) : [];
+    const parsedProdis = prodis ? (Array.isArray(prodis) ? prodis : prodis.split(',')) : [];
+    const parsedYears = years ? (Array.isArray(years) ? years : years.split(',')) : [];
+    const parsedCustomAngkatan = customAngkatan ? (Array.isArray(customAngkatan) ? customAngkatan : customAngkatan.split(',')) : [];
+
+    const data = getGraduateAnalyticsData({
+      search,
+      faculties: parsedFaculties,
+      prodis: parsedProdis,
+      years: parsedYears,
+      periode,
+      semester,
+      jenjang,
+      predikat,
+      timeHorizon,
+      customAngkatan: parsedCustomAngkatan,
+    });
+
     res.json({
       success: true,
       data,

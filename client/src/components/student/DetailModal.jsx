@@ -50,11 +50,30 @@ export const DetailModal = ({
   const jenjangData = analytics?.jenjangData || [];
   const foreignTrendData = analytics?.foreignTrend || [];
   const intakeTrendData = analytics?.intakeTrend || [];
-  const fluctuationData = analytics?.intakeFluctuation || {
-    isPositive: true,
-    percentage: '12.5%',
-    chartData: [],
-  };
+  
+  const fluctuationData = useMemo(() => {
+    const rawList = Array.isArray(analytics?.intakeFluctuation)
+      ? analytics.intakeFluctuation
+      : (analytics?.intakeFluctuation?.chartData || []);
+    
+    const validDeltas = rawList.filter(
+      (item) => item.deltaPercentage !== null && item.deltaPercentage !== undefined
+    );
+    const sum = validDeltas.reduce((acc, item) => acc + item.deltaPercentage, 0);
+    const avg = validDeltas.length > 0 ? sum / validDeltas.length : 0;
+    
+    const isPositive = avg >= 0;
+    const finalAverage = `${isPositive ? '+' : ''}${avg.toFixed(1)}%`;
+    const trendBadge = isPositive ? 'Tumbuh Positif' : 'Penurunan';
+
+    return {
+      isPositive,
+      finalAverage,
+      trendBadge,
+      chartData: rawList,
+    };
+  }, [analytics?.intakeFluctuation]);
+
   const activeStudents = useMemo(() => new Array(analytics?.totalActive || 554).fill({}), [analytics?.totalActive]);
 
   const sortedForeignTableData = useMemo(() => {

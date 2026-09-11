@@ -99,21 +99,21 @@ export const groupActiveStudentsByJenjang = (data) => {
 
 export const calculateTotalActiveStudents = (data) => {
   const active = getActiveStudentsData(data);
-  return active.length || 554;
+  return active.length;
 };
 
 export const calculateForeignStudentsMetric = (data) => {
   const students = data || getEnrichedStudents();
   const activeStudents = getActiveStudentsData(students);
-  const totalActive = activeStudents.length || 554;
+  const totalActive = activeStudents.length;
 
   const foreignStudents = activeStudents.filter((m) => {
     const nat = String(m.kewarganegaraan || '').trim().toUpperCase();
-    return nat !== 'INDONESIA' && nat !== 'WNI' && nat !== '';
+    return nat !== 'INDONESIA' && nat !== 'WNI' && nat !== '-' && nat !== '';
   });
 
-  const count = foreignStudents.length || 46;
-  const percentage = ((count / totalActive) * 100).toFixed(1);
+  const count = foreignStudents.length;
+  const percentage = totalActive > 0 ? ((count / totalActive) * 100).toFixed(1) : '0.0';
 
   return {
     count,
@@ -123,7 +123,7 @@ export const calculateForeignStudentsMetric = (data) => {
     target: '≥5%',
     status: Number(percentage) >= 5 ? 'Memenuhi Target IKU' : 'Di Bawah Target',
     distribution: [
-      { name: 'Indonesia (WNI)', count: totalActive - count, percentage: `${(100 - Number(percentage)).toFixed(1)}%` },
+      { name: 'Indonesia (WNI)', count: totalActive - count, percentage: `${totalActive > 0 ? (((totalActive - count) / totalActive) * 100).toFixed(1) : '100.0'}%` },
       { name: 'Mahasiswa Asing (Non-WNI)', count, percentage: `${percentage}%` },
     ],
   };
@@ -133,10 +133,11 @@ export const calculateActiveIntakeMetric = (data) => {
   const students = data || getEnrichedStudents();
   const activeStudents = getActiveStudentsData(students);
 
-  const sem1Students = activeStudents.filter((m) => Number(m.semester) === 1);
-  const count = sem1Students.length || 148;
+  // Intake mahasiswa baru are those with cohort (angkatan) matching CURRENT_YEAR (2026)
+  const currentCohortStudents = activeStudents.filter((m) => Number(m.angkatan) === CURRENT_YEAR);
+  const count = currentCohortStudents.length;
   const target = 160;
-  const filledPercentage = ((count / target) * 100).toFixed(1);
+  const filledPercentage = target > 0 ? ((count / target) * 100).toFixed(1) : '0.0';
 
   return {
     count,
@@ -158,16 +159,13 @@ export const calculateFiveYearIntakeTrend = (data) => {
   }
 
   students.forEach((m) => {
-    const entry = parseEntryPeriod(m.periode, m.angkatan);
-    const yr = entry.entryYear;
+    const yr = Number(m.angkatan);
     if (yr >= startYear && yr <= CURRENT_YEAR) {
       trendMap[yr].total += 1;
-      const isSem1 = Number(m.semester) === 1 || entry.entryYear === yr;
-      if (isSem1) {
-        trendMap[yr].intake += 1;
-      }
+      trendMap[yr].intake += 1;
+      
       const nat = String(m.kewarganegaraan || '').trim().toUpperCase();
-      if (nat !== 'INDONESIA' && nat !== 'WNI' && nat !== '') {
+      if (nat !== 'INDONESIA' && nat !== 'WNI' && nat !== '-' && nat !== '') {
         trendMap[yr].foreign += 1;
       }
     }
@@ -349,7 +347,7 @@ export const getForeignStudentTrend5Years = (data) => {
     if (yr >= startYear && yr <= CURRENT_YEAR && isActive) {
       yearMap[yr].totalActive += 1;
       const nat = String(m.kewarganegaraan || '').trim().toUpperCase();
-      if (nat !== 'INDONESIA' && nat !== 'WNI' && nat !== '') {
+      if (nat !== 'INDONESIA' && nat !== 'WNI' && nat !== '-' && nat !== '') {
         yearMap[yr].foreignActive += 1;
       }
     }
@@ -387,10 +385,10 @@ export const getIntakeTrend5Years = (data) => {
   }
 
   students.forEach((m) => {
-    const entry = parseEntryPeriod(m.periode, m.angkatan);
-    const yr = entry.entryYear;
+    const yr = Number(m.angkatan);
     if (yr >= startYear && yr <= CURRENT_YEAR) {
       yearMap[yr].intake += 1;
+      const entry = parseEntryPeriod(m.periode, m.angkatan);
       if (entry.entryTerm === 2) {
         yearMap[yr].genap += 1;
       } else {
